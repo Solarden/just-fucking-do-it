@@ -47,7 +47,7 @@ def _daemon_loop() -> None:
             interval_seconds = cfg.interval_minutes * 60
 
             if service.is_quiet_time():
-                logging.debug("Quiet time -- sleeping %ds", interval_seconds)
+                logging.info("Quiet time -- sleeping %d min", cfg.interval_minutes)
                 time.sleep(interval_seconds)
                 continue
 
@@ -60,7 +60,10 @@ def _daemon_loop() -> None:
                 continue
 
             level = service.get_escalation_level()
-            logging.info("Sending notification (level=%s)", level)
+            logging.info(
+                "Sending notification (level=%s, next in %d min)",
+                level, cfg.interval_minutes,
+            )
             send_progress_notification(level)
             time.sleep(interval_seconds)
 

@@ -36,7 +36,6 @@ def send_notification(title: str, message: str, sound: bool = True) -> None:
                 "terminal-notifier",
                 "-title", title,
                 "-message", message,
-                "-group", "jfdi",
                 "-sender", "com.apple.Terminal",
             ]
             if ICON_PATH.exists():
