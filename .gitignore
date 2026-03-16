@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# JFDI user data (created at runtime, not part of the repo)
+# ~/.jfdi/ is in home dir so already excluded, but just in case:
+*.db
+
+# Sound assets (users download their own, not committed)
+assets/*.mp3
+assets/*.wav
+assets/*.m4a
+assets/*.aiff
