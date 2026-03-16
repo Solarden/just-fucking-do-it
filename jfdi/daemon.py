@@ -16,7 +16,7 @@ import os
 import signal
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from jfdi import service
@@ -44,11 +44,11 @@ def _daemon_loop() -> None:
     while True:
         try:
             cfg = service.get_config()
-            interval_seconds = cfg.interval_minutes * 60
 
             if service.is_quiet_time():
-                logging.info("Quiet time -- sleeping %d min", cfg.interval_minutes)
-                time.sleep(interval_seconds)
+                sleep_min = cfg.interval_minutes
+                logging.info("Quiet time -- sleeping %d min", sleep_min)
+                time.sleep(sleep_min * 60)
                 continue
 
             status = service.get_status()
@@ -60,12 +60,13 @@ def _daemon_loop() -> None:
                 continue
 
             level = service.get_escalation_level()
+            adaptive_min = service.get_adaptive_interval()
             logging.info(
-                "Sending notification (level=%s, next in %d min)",
-                level, cfg.interval_minutes,
+                "Sending notification (level=%s, next in %d min [base %d])",
+                level, adaptive_min, cfg.interval_minutes,
             )
             send_progress_notification(level)
-            time.sleep(interval_seconds)
+            time.sleep(adaptive_min * 60)
 
         except KeyboardInterrupt:
             logging.info("Daemon stopped by keyboard interrupt")
@@ -80,9 +81,9 @@ def _daemon_loop() -> None:
 def _sleep_until_tomorrow() -> None:
     """Sleep until midnight + 1 minute to start a new day."""
     now = datetime.now()
-    tomorrow = now.replace(hour=0, minute=1, second=0, microsecond=0)
-    if tomorrow <= now:
-        tomorrow = tomorrow.replace(day=now.day + 1)
+    tomorrow = (now + timedelta(days=1)).replace(
+        hour=0, minute=1, second=0, microsecond=0,
+    )
     sleep_seconds = (tomorrow - now).total_seconds()
     time.sleep(max(60, sleep_seconds))
 

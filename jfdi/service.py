@@ -22,6 +22,7 @@ from jfdi.models import (
     DailyStatus,
     DayRecord,
     ExerciseProgress,
+    ExercisePrediction,
     MessageEntry,
     SoundEntry,
     StreakInfo,
@@ -431,28 +432,33 @@ def is_daemon_running() -> bool:
         return False
 
 
+def _time_pct_today() -> float:
+    """Fraction of the active window elapsed (minute-level precision)."""
+    cfg = get_config()
+    now = datetime.now()
+    start_min = cfg.quiet_hours_start * 60
+    end_min = cfg.quiet_hours_end * 60
+    now_min = now.hour * 60 + now.minute
+    total = end_min - start_min
+    if total <= 0:
+        total = 24 * 60
+    elapsed = max(0, now_min - start_min)
+    return min(1.0, elapsed / total) if total > 0 else 1.0
+
+
 def get_escalation_level() -> str:
     """Returns 'friendly', 'urgent', or 'shia' based on progress vs time of day."""
-    cfg = get_config()
     status = get_status()
-    now = datetime.now().hour
-
-    total_hours = cfg.quiet_hours_end - cfg.quiet_hours_start
-    if total_hours <= 0:
-        total_hours = 24
-
-    hours_elapsed = max(0, now - cfg.quiet_hours_start)
-    time_pct = hours_elapsed / total_hours if total_hours > 0 else 1.0
 
     if not status.exercises:
+        return "friendly"
+    if status.all_complete:
         return "friendly"
 
     total_done = sum(e.done for e in status.exercises)
     total_goal = sum(e.goal for e in status.exercises)
     progress_pct = total_done / total_goal if total_goal > 0 else 1.0
-
-    if status.all_complete:
-        return "friendly"
+    time_pct = _time_pct_today()
 
     if progress_pct >= time_pct:
         return "friendly"
@@ -460,3 +466,118 @@ def get_escalation_level() -> str:
         return "urgent"
     else:
         return "shia"
+
+
+# ---------------------------------------------------------------------------
+# Prediction & pacing
+# ---------------------------------------------------------------------------
+
+
+def _compute_momentum(sets: list[int]) -> str:
+    """Compare first half vs second half of sets to detect trend."""
+    if len(sets) < 4:
+        return "no_data"
+    mid = len(sets) // 2
+    first_avg = sum(sets[:mid]) / mid
+    second_avg = sum(sets[mid:]) / (len(sets) - mid)
+    if first_avg == 0:
+        return "accelerating" if second_avg > 0 else "no_data"
+    ratio = second_avg / first_avg
+    if ratio > 1.1:
+        return "accelerating"
+    elif ratio < 0.9:
+        return "decelerating"
+    return "steady"
+
+
+def get_predictions() -> list[ExercisePrediction]:
+    """Compute pacing predictions for every active exercise."""
+    cfg = get_config()
+    status = get_status()
+    now = datetime.now()
+
+    start_min = cfg.quiet_hours_start * 60
+    end_min = cfg.quiet_hours_end * 60
+    now_min = now.hour * 60 + now.minute
+    total_active_min = end_min - start_min
+    if total_active_min <= 0:
+        total_active_min = 24 * 60
+
+    intervals_total = max(1, total_active_min // cfg.interval_minutes)
+    elapsed_min = max(0, now_min - start_min)
+    intervals_elapsed = max(1, elapsed_min // cfg.interval_minutes) if elapsed_min > 0 else 0
+    intervals_left = max(0, intervals_total - intervals_elapsed)
+
+    predictions: list[ExercisePrediction] = []
+    for ex in status.exercises:
+        if ex.complete:
+            predictions.append(ExercisePrediction(
+                name=ex.name, done=ex.done, goal=ex.goal, remaining=0,
+                intervals_elapsed=intervals_elapsed, intervals_left=intervals_left,
+                intervals_total=intervals_total, projected_total=ex.done,
+                on_track=True, reps_per_set=0, bigger_sets=0, smaller_sets=0,
+                momentum=_compute_momentum(ex.sets),
+            ))
+            continue
+
+        if intervals_elapsed > 0:
+            pace = ex.done / intervals_elapsed
+            projected = round(pace * intervals_total)
+        else:
+            projected = 0
+
+        remaining = ex.remaining
+        if intervals_left > 0:
+            base, extra = divmod(remaining, intervals_left)
+        else:
+            base, extra = remaining, 0
+
+        predictions.append(ExercisePrediction(
+            name=ex.name,
+            done=ex.done,
+            goal=ex.goal,
+            remaining=remaining,
+            intervals_elapsed=intervals_elapsed,
+            intervals_left=intervals_left,
+            intervals_total=intervals_total,
+            projected_total=projected,
+            on_track=projected >= ex.goal,
+            reps_per_set=base,
+            bigger_sets=extra,
+            smaller_sets=max(0, intervals_left - extra),
+            momentum=_compute_momentum(ex.sets),
+        ))
+
+    return predictions
+
+
+def get_adaptive_interval() -> int:
+    """Return an adjusted notification interval (minutes) based on pacing.
+
+    Behind pace  -> halve the interval (floor 5 min)
+    On pace      -> use configured interval
+    Ahead of pace -> 1.5x the interval (cap at 2x configured)
+    """
+    cfg = get_config()
+    status = get_status()
+    base = cfg.interval_minutes
+
+    if not status.exercises or status.all_complete:
+        return base
+
+    total_done = sum(e.done for e in status.exercises)
+    total_goal = sum(e.goal for e in status.exercises)
+    progress_pct = total_done / total_goal if total_goal > 0 else 1.0
+    time_pct = _time_pct_today()
+
+    if time_pct == 0:
+        return base
+
+    ratio = progress_pct / time_pct
+
+    if ratio >= 1.0:
+        return min(base * 2, int(base * 1.5))
+    elif ratio >= 0.5:
+        return base
+    else:
+        return max(5, base // 2)

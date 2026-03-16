@@ -70,6 +70,38 @@ class AppConfig:
 
 
 @dataclass
+class ExercisePrediction:
+    """Pacing prediction for a single exercise."""
+
+    name: str
+    done: int
+    goal: int
+    remaining: int
+    intervals_elapsed: int
+    intervals_left: int
+    intervals_total: int
+    projected_total: int
+    on_track: bool
+    reps_per_set: int
+    bigger_sets: int
+    smaller_sets: int
+    momentum: str  # "accelerating", "decelerating", "steady", or "no_data"
+
+    @property
+    def pacing_str(self) -> str:
+        """Human-readable pacing plan, e.g. '5 sets of 11, 4 sets of 10'."""
+        if self.intervals_left <= 0 or self.remaining <= 0:
+            return ""
+        parts = []
+        if self.bigger_sets > 0:
+            reps = self.reps_per_set + 1
+            parts.append(f"{self.bigger_sets}x{reps}")
+        if self.smaller_sets > 0 and self.reps_per_set > 0:
+            parts.append(f"{self.smaller_sets}x{self.reps_per_set}")
+        return " + ".join(parts)
+
+
+@dataclass
 class MessageEntry:
     id: int
     text: str

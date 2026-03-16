@@ -62,6 +62,26 @@ def send_notification(title: str, message: str, sound: bool = True) -> None:
             play_do_it(custom)
 
 
+_MOMENTUM_HINTS = {
+    "accelerating": "You're picking up steam!",
+    "decelerating": "You're slowing down -- push through!",
+}
+
+
+def _build_pacing_hint() -> str:
+    """Build a short pacing line for notification bodies."""
+    predictions = service.get_predictions()
+    parts = []
+    for p in predictions:
+        if p.remaining <= 0 or p.on_track:
+            continue
+        hint = f"At this pace: {p.projected_total}/{p.goal} {p.name}."
+        if p.pacing_str:
+            hint += f" Do {p.pacing_str}."
+        parts.append(hint)
+    return " ".join(parts)
+
+
 def send_progress_notification(level: str = "friendly") -> None:
     """Build and send a notification based on current progress and escalation level."""
     status = service.get_status()
@@ -80,11 +100,17 @@ def send_progress_notification(level: str = "friendly") -> None:
     if level == "shia":
         quote = service.get_random_message("nudge")
         title = "JUST FUCKING DO IT!"
+        pacing = _build_pacing_hint()
         msg = f"{quote}\n\nRemaining: {remaining_str}"
+        if pacing:
+            msg += f"\n{pacing}"
     elif level == "urgent":
         quote = service.get_random_message("nudge")
         title = "JFDI - Time to move!"
+        pacing = _build_pacing_hint()
         msg = f"{quote}\n\nRemaining: {remaining_str}"
+        if pacing:
+            msg += f"\n{pacing}"
     else:
         quote = service.get_random_message("quote")
         title = "JFDI - Friendly reminder"

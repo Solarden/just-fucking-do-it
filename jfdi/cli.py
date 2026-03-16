@@ -76,12 +76,21 @@ def log(exercise: str, reps: int = typer.Argument(..., min=1)):
         console.print(f"  {progress.remaining} more to go.\n")
 
 
+_MOMENTUM_LABELS = {
+    "accelerating": "[green]picking up steam[/green]",
+    "decelerating": "[red]slowing down[/red]",
+    "steady": "[cyan]steady pace[/cyan]",
+    "no_data": "",
+}
+
+
 @app.command()
 def status():
     """Show today's progress toward each goal."""
     st = service.get_status()
     streak = service.get_streak()
     cfg = service.get_config()
+    predictions = {p.name: p for p in service.get_predictions()}
 
     console.print(art.BANNER, style="bold cyan")
 
@@ -101,6 +110,19 @@ def status():
             sets_str = " + ".join(str(s) for s in ex.sets)
             console.print(f"    [dim]Sets: {sets_str}[/dim]")
 
+        pred = predictions.get(ex.name)
+        if pred and not ex.complete and pred.intervals_elapsed > 0:
+            track_label = "[green]on track[/green]" if pred.on_track else "[red]not on track[/red]"
+            momentum = _MOMENTUM_LABELS.get(pred.momentum, "")
+            mom_suffix = f" ({momentum})" if momentum else ""
+            console.print(
+                f"    [dim]Projected: {pred.projected_total}/{pred.goal} -- {track_label}{mom_suffix}[/dim]"
+            )
+            if pred.pacing_str and pred.intervals_left > 0:
+                console.print(
+                    f"    [dim]To finish: {pred.pacing_str} over {pred.intervals_left} intervals[/dim]"
+                )
+
     console.print()
 
     if streak.current > 0:
@@ -109,7 +131,8 @@ def status():
         console.print(f"  [dim]Best streak: {streak.best} days[/dim]")
 
     if st.daemon_running:
-        console.print(f"  [dim]Daemon: running (PID {st.daemon_pid}) | Interval: {cfg.interval_minutes}min[/dim]")
+        adaptive = service.get_adaptive_interval()
+        console.print(f"  [dim]Daemon: running (PID {st.daemon_pid}) | Interval: {adaptive}min (base {cfg.interval_minutes})[/dim]")
     else:
         console.print("  [dim]Daemon: not running (start with 'jfdi daemon start')[/dim]")
 
@@ -181,6 +204,44 @@ def export_cmd(
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
     console.print(f"  [green]Exported to:[/green] {path}\n")
+
+
+@app.command()
+def pace():
+    """Show pacing predictions and optimal rep distribution."""
+    predictions = service.get_predictions()
+    cfg = service.get_config()
+
+    if not predictions:
+        console.print("  [dim]No active exercises.[/dim]\n")
+        return
+
+    first = predictions[0]
+    console.print(f"\n  [bold]Pacing Plan[/bold] ({first.intervals_left} intervals left, every {cfg.interval_minutes}min)")
+    console.print(f"  {'─' * 50}")
+
+    for p in predictions:
+        if p.remaining <= 0:
+            console.print(f"  [green]✓[/green] {p.name:<12s} {p.done}/{p.goal}  [green]COMPLETE[/green]")
+            continue
+
+        track = "[green]on track[/green]" if p.on_track else "[red]behind[/red]"
+        momentum = _MOMENTUM_LABELS.get(p.momentum, "")
+
+        console.print(f"    {p.name:<12s} {p.done}/{p.goal}  Projected: {p.projected_total}  {track}")
+
+        if p.pacing_str:
+            console.print(f"    {'':12s} Need: {p.pacing_str}")
+
+        if momentum:
+            console.print(f"    {'':12s} Momentum: {momentum}")
+
+    if any(not p.on_track and p.remaining > 0 for p in predictions):
+        console.print(f"\n  [bold yellow]Pick it up! You need to push harder to hit your goals.[/bold yellow]")
+    elif all(p.on_track for p in predictions):
+        console.print(f"\n  [bold green]Looking good -- keep this pace and you'll crush it.[/bold green]")
+
+    console.print()
 
 
 # ---------------------------------------------------------------------------
@@ -448,7 +509,7 @@ def _maybe_handle_alias() -> None:
 
     # Skip if it's a known command or subcommand
     known = {
-        "log", "status", "undo", "history", "streak", "export",
+        "log", "status", "undo", "history", "streak", "export", "pace",
         "config", "message", "sound", "daemon",
         "--help", "-h", "--install-completion", "--show-completion",
     }
