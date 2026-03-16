@@ -1,38 +1,65 @@
-"""macOS desktop notifications via osascript + sound playback."""
+"""macOS desktop notifications via terminal-notifier (with icon) or osascript fallback."""
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 from jfdi import service
 from jfdi.sound import play_do_it
 
+ICON_PATH = Path(__file__).parent.parent / "assets" / "icon.png"
+
+_notifier_cache: str | None = None
+
+
+def _get_notifier() -> str:
+    """Return 'terminal-notifier' if available, else 'osascript'."""
+    global _notifier_cache
+    if _notifier_cache is None:
+        _notifier_cache = "terminal-notifier" if shutil.which("terminal-notifier") else "osascript"
+    return _notifier_cache
+
 
 def send_notification(title: str, message: str, sound: bool = True) -> None:
-    """Send a macOS desktop notification."""
+    """Send a macOS desktop notification with icon support."""
     if sys.platform != "darwin":
         return
 
-    message_escaped = message.replace('"', '\\"')
-    title_escaped = title.replace('"', '\\"')
-    script = (
-        f'display notification "{message_escaped}" '
-        f'with title "{title_escaped}"'
-    )
+    notifier = _get_notifier()
+
     try:
-        subprocess.run(
-            ["osascript", "-e", script],
-            capture_output=True,
-            timeout=5,
-        )
+        if notifier == "terminal-notifier":
+            cmd = [
+                "terminal-notifier",
+                "-title", title,
+                "-message", message,
+                "-group", "jfdi",
+                "-sender", "com.apple.Terminal",
+            ]
+            if ICON_PATH.exists():
+                cmd.extend(["-appIcon", str(ICON_PATH)])
+            subprocess.run(cmd, capture_output=True, timeout=5)
+        else:
+            message_escaped = message.replace('"', '\\"').replace("\n", "\\n")
+            title_escaped = title.replace('"', '\\"')
+            script = (
+                f'display notification "{message_escaped}" '
+                f'with title "{title_escaped}"'
+            )
+            subprocess.run(["osascript", "-e", script], capture_output=True, timeout=5)
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
 
     if sound:
         cfg = service.get_config()
         if cfg.sound_enabled:
-            custom = service.get_active_sound_path()
+            if cfg.active_sound:
+                custom = service.get_active_sound_path()
+            else:
+                custom = service.get_random_sound_path()
             play_do_it(custom)
 
 

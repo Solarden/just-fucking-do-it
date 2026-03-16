@@ -310,6 +310,10 @@ def list_sounds() -> list[SoundEntry]:
 
 def add_sound(name: str, file_path: str) -> SoundEntry:
     name = name.lower().strip()
+    # Strip file extensions from the name so users don't end up with "arnold.mp3" as a name
+    for ext in (".mp3", ".wav", ".m4a", ".aiff"):
+        if name.endswith(ext):
+            name = name[: -len(ext)]
     src = Path(file_path).expanduser().resolve()
     if not src.exists():
         raise ValueError(f"File not found: {src}")
@@ -351,6 +355,14 @@ def get_active_sound_path() -> str | None:
         if not name:
             return None
         sound = db.get_sound_by_name(conn, name)
+    return sound["path"] if sound else None
+
+
+def get_random_sound_path() -> str | None:
+    """Returns path to a random sound from the library, or None if empty."""
+    _ensure_db()
+    with db.get_conn() as conn:
+        sound = db.get_random_sound(conn)
     return sound["path"] if sound else None
 
 

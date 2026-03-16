@@ -2,46 +2,76 @@
 
 Forks a process that sends periodic notifications based on
 escalation level and quiet hours.
+
+NOTE: We intentionally do NOT call os.setsid() because detaching from
+the user's login session prevents osascript from displaying macOS
+notifications.  The child stays in the same session but redirects
+stdio to /dev/null so it doesn't block the terminal.
 """
 
 from __future__ import annotations
 
+import logging
 import os
 import signal
 import sys
 import time
 from datetime import datetime
+from pathlib import Path
 
 from jfdi import service
 from jfdi.notifier import send_progress_notification
 
+LOG_DIR = Path.home() / ".jfdi"
+LOG_FILE = LOG_DIR / "daemon.log"
+
+
+def _setup_logging() -> None:
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(
+        filename=str(LOG_FILE),
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
 
 def _daemon_loop() -> None:
     """Main daemon loop -- runs until killed."""
+    _setup_logging()
+    logging.info("Daemon started (PID %d)", os.getpid())
+
     while True:
         try:
             cfg = service.get_config()
             interval_seconds = cfg.interval_minutes * 60
 
             if service.is_quiet_time():
+                logging.debug("Quiet time -- sleeping %ds", interval_seconds)
                 time.sleep(interval_seconds)
                 continue
 
             status = service.get_status()
 
             if status.all_complete:
+                logging.info("All goals complete -- sending celebration, sleeping until tomorrow")
                 send_progress_notification("friendly")
                 _sleep_until_tomorrow()
                 continue
 
             level = service.get_escalation_level()
+            logging.info("Sending notification (level=%s)", level)
             send_progress_notification(level)
             time.sleep(interval_seconds)
 
         except KeyboardInterrupt:
+            logging.info("Daemon stopped by keyboard interrupt")
             break
         except Exception:
+            logging.exception("Error in daemon loop")
             time.sleep(60)
+
+    logging.info("Daemon exiting")
 
 
 def _sleep_until_tomorrow() -> None:
@@ -65,9 +95,8 @@ def start_daemon() -> int | None:
         service.save_daemon_pid(pid)
         return pid
 
-    # Child: detach and run the loop
-    os.setsid()
-    # Close standard file descriptors
+    # Child: stay in the same session (no setsid!) so osascript can
+    # reach the macOS notification center.  Just redirect stdio.
     sys.stdin.close()
     devnull = os.open(os.devnull, os.O_RDWR)
     os.dup2(devnull, 1)

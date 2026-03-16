@@ -366,3 +366,15 @@ def get_sound_by_name(conn: sqlite3.Connection, name: str) -> dict[str, Any] | N
         "SELECT id, name, path, is_default FROM sounds WHERE name = ?", (name,)
     ).fetchone()
     return dict(row) if row else None
+
+
+def get_random_sound(conn: sqlite3.Connection) -> dict[str, Any] | None:
+    row = conn.execute(
+        "SELECT id, name, path, is_default FROM sounds ORDER BY RANDOM() LIMIT 1"
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def rename_sound(conn: sqlite3.Connection, sound_id: int, new_name: str) -> bool:
+    cur = conn.execute("UPDATE sounds SET name = ? WHERE id = ?", (new_name, sound_id))
+    return cur.rowcount > 0

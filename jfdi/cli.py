@@ -52,7 +52,10 @@ def log(exercise: str, reps: int = typer.Argument(..., min=1)):
 
     cfg = service.get_config()
     if cfg.sound_enabled:
-        custom = service.get_active_sound_path()
+        if cfg.active_sound:
+            custom = service.get_active_sound_path()
+        else:
+            custom = service.get_random_sound_path()
         sound_module.play_do_it(custom)
 
     bar_width = 30

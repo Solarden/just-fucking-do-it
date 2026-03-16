@@ -39,3 +39,9 @@ assets/*.mp3
 assets/*.wav
 assets/*.m4a
 assets/*.aiff
+
+# Keep the icon (it's small and part of the app)
+!assets/icon.png
+
+# Daemon log
+daemon.log
