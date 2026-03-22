@@ -50,17 +50,6 @@ brew tap Solarden/jfdi
 brew install jfdi
 ```
 
-### pip
-
-```bash
-pip install jfdi
-
-# Or from source
-git clone https://github.com/Solarden/just-fucking-do-it.git
-cd just-fucking-do-it
-pip install .
-```
-
 ## Quick Start
 
 ```bash
@@ -189,42 +178,6 @@ cli.py (presentation)  -->  service.py (business logic)  -->  db.py (SQLite)
 - `cli.py` -- Thin layer that calls service and formats with Rich
 
 A future GUI just imports `service.py` and renders the same data differently.
-
-## Development
-
-```bash
-# Install in editable mode with dev dependencies
-pip install -e ".[dev]"
-
-# Run tests
-pytest tests/ -v
-```
-
-### Publishing to PyPI
-
-```bash
-# Install publishing tools
-pip install -e ".[publish]"
-
-# Build the package
-python -m build
-
-# Upload to PyPI
-twine upload dist/*
-```
-
-### Setting Up the Homebrew Tap
-
-1. Create a GitHub repo named `homebrew-jfdi` under your account
-2. Copy `Formula/jfdi.rb` from this repo into that repo
-3. Create a GitHub release (tag `v0.1.0`) on this repo
-4. Update the `sha256` in the formula:
-   ```bash
-   curl -sL https://github.com/Solarden/just-fucking-do-it/archive/refs/tags/v0.1.0.tar.gz | shasum -a 256
-   ```
-5. Update the resource hashes for each Python dependency
-6. Push to the `homebrew-jfdi` repo
-7. Users can then: `brew tap Solarden/jfdi && brew install jfdi`
 
 ## Data Storage
 

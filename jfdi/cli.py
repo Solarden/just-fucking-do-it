@@ -254,6 +254,7 @@ def config_show():
     console.print(f"  {'─' * 35}")
     console.print(f"  Interval:      {cfg.interval_minutes} min")
     console.print(f"  Sound:         {'on' if cfg.sound_enabled else 'off'}")
+    console.print(f"  Volume:        {cfg.sound_volume}%")
     console.print(f"  Quiet hours:   {cfg.quiet_hours_start}:00 - {cfg.quiet_hours_end}:00")
     console.print(f"  Active sound:  {cfg.active_sound or 'default (do_it.mp3)'}")
     console.print()
@@ -299,6 +300,17 @@ def config_sound(state: str = typer.Argument(..., help="'on' or 'off'.")):
         raise typer.Exit(1)
     service.set_sound(state.lower() == "on")
     console.print(f"  [green]Sound {'enabled' if state.lower() == 'on' else 'disabled'}.[/green]\n")
+
+
+@config_app.command("volume")
+def config_volume(level: int = typer.Argument(..., min=0, max=100, help="Volume level 0-100.")):
+    """Set notification sound volume (0-100)."""
+    try:
+        service.set_volume(level)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+    console.print(f"  [green]Volume set to {level}%.[/green]\n")
 
 
 @config_app.command("add")

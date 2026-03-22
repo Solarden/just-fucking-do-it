@@ -64,6 +64,7 @@ class AppConfig:
     sound_enabled: bool = True
     exercises: dict[str, int] = field(default_factory=dict)
     aliases: dict[str, str] = field(default_factory=dict)
+    sound_volume: int = 100
     active_sound: str | None = None
     quiet_hours_start: int = 8
     quiet_hours_end: int = 22

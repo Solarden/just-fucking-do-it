@@ -184,6 +184,7 @@ def get_config() -> AppConfig:
         sound_enabled=all_cfg.get("sound_enabled", "1") == "1",
         exercises=exercises,
         aliases=aliases,
+        sound_volume=int(all_cfg.get("sound_volume", "100")),
         active_sound=all_cfg.get("active_sound"),
         quiet_hours_start=int(all_cfg.get("quiet_hours_start", "8")),
         quiet_hours_end=int(all_cfg.get("quiet_hours_end", "22")),
@@ -202,6 +203,14 @@ def set_sound(enabled: bool) -> None:
     database = _ensure_db()
     with database.get_conn() as conn:
         db.set_config_value(conn, "sound_enabled", "1" if enabled else "0")
+
+
+def set_volume(level: int) -> None:
+    if not (0 <= level <= 100):
+        raise ValueError("Volume must be between 0 and 100.")
+    database = _ensure_db()
+    with database.get_conn() as conn:
+        db.set_config_value(conn, "sound_volume", str(level))
 
 
 def set_quiet_hours(start: int, end: int) -> None:

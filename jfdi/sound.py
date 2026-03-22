@@ -12,10 +12,11 @@ USER_SOUNDS_DIR = Path.home() / ".jfdi" / "sounds"
 _current_player: subprocess.Popen | None = None
 
 
-def play_sound(sound_path: str | None = None) -> None:
+def play_sound(sound_path: str | None = None, volume: int = 100) -> None:
     """Play a sound file non-blocking.  Falls back to built-in DO IT clip.
 
     Kills any previously playing sound to prevent overlap.
+    ``volume`` is 0-100 and maps to afplay's -v flag (0.0-1.0).
     """
     global _current_player
 
@@ -30,9 +31,10 @@ def play_sound(sound_path: str | None = None) -> None:
     if _current_player is not None and _current_player.poll() is None:
         _current_player.terminate()
 
+    vol = max(0.0, min(1.0, volume / 100))
     try:
         _current_player = subprocess.Popen(
-            ["afplay", str(path)],
+            ["afplay", "-v", str(vol), str(path)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
@@ -40,9 +42,9 @@ def play_sound(sound_path: str | None = None) -> None:
         pass
 
 
-def play_do_it(custom_path: str | None = None) -> None:
+def play_do_it(custom_path: str | None = None, volume: int = 100) -> None:
     """Play the configured notification sound."""
-    play_sound(custom_path)
+    play_sound(custom_path, volume=volume)
 
 
 def sound_available() -> bool:

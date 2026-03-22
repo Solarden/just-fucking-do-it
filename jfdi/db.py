@@ -58,6 +58,7 @@ _DEFAULT_EXERCISES = [
 _DEFAULT_CONFIG = {
     "interval": "30",
     "sound_enabled": "1",
+    "sound_volume": "100",
     "quiet_hours_start": "8",
     "quiet_hours_end": "22",
     "alias:p": "pushups",

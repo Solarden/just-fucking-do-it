@@ -58,7 +58,7 @@ def send_notification(title: str, message: str, sound: bool = True) -> None:
                 custom = service.get_active_sound_path()
             else:
                 custom = service.get_random_sound_path()
-            play_do_it(custom)
+            play_do_it(custom, volume=cfg.sound_volume)
 
 
 _MOMENTUM_HINTS = {
