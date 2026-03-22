@@ -10,7 +10,7 @@ from pathlib import Path
 from jfdi import service
 from jfdi.sound import play_do_it
 
-ICON_PATH = Path(__file__).parent.parent / "assets" / "icon.png"
+ICON_PATH = Path(__file__).parent / "assets" / "icon.png"
 
 _notifier_cache: str | None = None
 
@@ -42,13 +42,12 @@ def send_notification(title: str, message: str, sound: bool = True) -> None:
                 cmd.extend(["-appIcon", str(ICON_PATH)])
             subprocess.run(cmd, capture_output=True, timeout=5)
         else:
-            message_escaped = message.replace('"', '\\"').replace("\n", "\\n")
-            title_escaped = title.replace('"', '\\"')
-            script = (
-                f'display notification "{message_escaped}" '
-                f'with title "{title_escaped}"'
+            script = 'display notification (item 1 of argv) with title (item 2 of argv)'
+            full_script = f'on run argv\n{script}\nend run'
+            subprocess.run(
+                ["osascript", "-e", full_script, message, title],
+                capture_output=True, timeout=5,
             )
-            subprocess.run(["osascript", "-e", script], capture_output=True, timeout=5)
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
 

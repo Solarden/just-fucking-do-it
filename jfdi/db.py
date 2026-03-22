@@ -86,74 +86,97 @@ _DEFAULT_MESSAGES = [
 # Connection management
 # ---------------------------------------------------------------------------
 
-_db_path_override: Path | None = None
-_initialized: bool = False
+
+class Database:
+    """Encapsulates a database path and its initialization state."""
+
+    def __init__(self, path: Path | None = None) -> None:
+        self._path = path or DB_PATH
+        self._initialized = False
+
+    @property
+    def path(self) -> Path:
+        return self._path
+
+    @property
+    def initialized(self) -> bool:
+        return self._initialized
+
+    @contextmanager
+    def get_conn(self) -> Iterator[sqlite3.Connection]:
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(self._path))
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA foreign_keys=ON")
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    def init_db(self) -> None:
+        """Create tables and seed default data if needed."""
+        if self._initialized:
+            return
+        with self.get_conn() as conn:
+            conn.executescript(_SCHEMA)
+
+            # Seed exercises
+            for name, goal in _DEFAULT_EXERCISES:
+                conn.execute(
+                    "INSERT OR IGNORE INTO exercises (name, daily_goal) VALUES (?, ?)",
+                    (name, goal),
+                )
+
+            # Seed config
+            for key, value in _DEFAULT_CONFIG.items():
+                conn.execute(
+                    "INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)",
+                    (key, value),
+                )
+
+            # Seed messages
+            existing = conn.execute("SELECT COUNT(*) FROM messages WHERE is_builtin = 1").fetchone()[0]
+            if existing == 0:
+                conn.executemany(
+                    "INSERT INTO messages (text, category, is_builtin) VALUES (?, ?, ?)",
+                    _DEFAULT_MESSAGES,
+                )
+
+        self._initialized = True
+
+
+# Module-level default instance for production use.
+_default = Database()
+
+
+# ---------------------------------------------------------------------------
+# Backward-compat wrappers (delegates to _default instance)
+# ---------------------------------------------------------------------------
 
 
 def set_db_path(path: Path | None) -> None:
-    """Override the DB path (used for testing with temp databases)."""
-    global _db_path_override, _initialized
-    _db_path_override = path
-    _initialized = False
+    """Override the DB path.  Replaces the default Database instance."""
+    global _default
+    _default = Database(path)
 
 
-def _get_db_path() -> Path:
-    return _db_path_override or DB_PATH
-
-
-def is_initialized() -> bool:
-    return _initialized
-
-
-@contextmanager
 def get_conn() -> Iterator[sqlite3.Connection]:
-    path = _get_db_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path))
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    try:
-        yield conn
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
+    """Context manager — delegates to the default Database instance."""
+    return _default.get_conn()
 
 
 def init_db() -> None:
-    """Create tables and seed default data if needed."""
-    global _initialized
-    if _initialized:
-        return
-    with get_conn() as conn:
-        conn.executescript(_SCHEMA)
+    """Delegates to the default Database instance."""
+    _default.init_db()
 
-        # Seed exercises
-        for name, goal in _DEFAULT_EXERCISES:
-            conn.execute(
-                "INSERT OR IGNORE INTO exercises (name, daily_goal) VALUES (?, ?)",
-                (name, goal),
-            )
 
-        # Seed config
-        for key, value in _DEFAULT_CONFIG.items():
-            conn.execute(
-                "INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)",
-                (key, value),
-            )
-
-        # Seed messages
-        existing = conn.execute("SELECT COUNT(*) FROM messages WHERE is_builtin = 1").fetchone()[0]
-        if existing == 0:
-            conn.executemany(
-                "INSERT INTO messages (text, category, is_builtin) VALUES (?, ?, ?)",
-                _DEFAULT_MESSAGES,
-            )
-
-    _initialized = True
+def is_initialized() -> bool:
+    return _default.initialized
 
 
 # ---------------------------------------------------------------------------
@@ -200,8 +223,9 @@ def insert_log(conn: sqlite3.Connection, exercise_id: int, reps: int) -> int:
     return cur.lastrowid  # type: ignore[return-value]
 
 
-def get_today_logs(conn: sqlite3.Connection, exercise_id: int) -> list[dict[str, Any]]:
-    today = datetime.now().strftime("%Y-%m-%d")
+def get_today_logs(conn: sqlite3.Connection, exercise_id: int, today: str | None = None) -> list[dict[str, Any]]:
+    if today is None:
+        today = datetime.now().strftime("%Y-%m-%d")
     rows = conn.execute(
         "SELECT id, reps, logged_at FROM logs "
         "WHERE exercise_id = ? AND date(logged_at) = ? ORDER BY logged_at",
@@ -210,8 +234,9 @@ def get_today_logs(conn: sqlite3.Connection, exercise_id: int) -> list[dict[str,
     return [dict(r) for r in rows]
 
 
-def get_today_total(conn: sqlite3.Connection, exercise_id: int) -> int:
-    today = datetime.now().strftime("%Y-%m-%d")
+def get_today_total(conn: sqlite3.Connection, exercise_id: int, today: str | None = None) -> int:
+    if today is None:
+        today = datetime.now().strftime("%Y-%m-%d")
     row = conn.execute(
         "SELECT COALESCE(SUM(reps), 0) AS total FROM logs "
         "WHERE exercise_id = ? AND date(logged_at) = ?",

@@ -8,10 +8,7 @@ from typing import Optional
 
 import typer
 from rich.console import Console
-from rich.panel import Panel
-from rich.progress_bar import ProgressBar
 from rich.table import Table
-from rich.text import Text
 
 from jfdi import art, service, sound as sound_module
 from jfdi.daemon import daemon_status, start_daemon, stop_daemon
@@ -500,36 +497,55 @@ def daemon_status_cmd():
 # by checking sys.argv before Typer processes them.
 
 
+def _get_known_commands() -> set[str]:
+    """Derive known commands from Typer's registered commands and groups."""
+    known = {"--help", "-h", "--install-completion", "--show-completion"}
+    for cmd_info in app.registered_commands:
+        name = cmd_info.name or cmd_info.callback.__name__ if cmd_info.callback else None
+        if name:
+            known.add(name)
+    for group_info in app.registered_groups:
+        if group_info.name:
+            known.add(group_info.name)
+    return known
+
+
 def _maybe_handle_alias() -> None:
-    """If the first arg looks like an alias + number, rewrite argv for the log command."""
-    if len(sys.argv) < 3:
+    """If the first non-flag arg looks like an alias + number, rewrite argv for the log command."""
+    args = sys.argv[1:]
+    if len(args) < 2:
         return
 
-    potential_alias = sys.argv[1]
+    # Skip leading flags to find the first positional arg
+    flags = []
+    positional = []
+    for arg in args:
+        if not positional and arg.startswith("-"):
+            flags.append(arg)
+        else:
+            positional.append(arg)
 
-    # Skip if it's a known command or subcommand
-    known = {
-        "log", "status", "undo", "history", "streak", "export", "pace",
-        "config", "message", "sound", "daemon",
-        "--help", "-h", "--install-completion", "--show-completion",
-    }
-    if potential_alias in known:
+    if len(positional) < 2:
         return
 
-    # Check if the second arg is a number (reps)
+    potential_alias = positional[0]
+
+    if potential_alias in _get_known_commands():
+        return
+
+    # Check if the second positional arg is a number (reps)
     try:
-        int(sys.argv[2])
-    except (ValueError, IndexError):
+        int(positional[1])
+    except ValueError:
         return
 
     # Try to resolve the alias
     resolved = service.resolve_alias(potential_alias)
     if resolved != potential_alias:
-        sys.argv = [sys.argv[0], "log", resolved, sys.argv[2]] + sys.argv[3:]
+        sys.argv = [sys.argv[0]] + flags + ["log", resolved, positional[1]] + positional[2:]
 
 
 def main() -> None:
-    service._ensure_db()
     _maybe_handle_alias()
     app()
 

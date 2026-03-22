@@ -47,7 +47,7 @@ jfdi = "jfdi.cli:main"
 include = ["jfdi*"]
 
 [tool.setuptools.package-data]
-jfdi = ["../assets/*"]
+jfdi = ["assets/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

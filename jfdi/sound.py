@@ -6,12 +6,19 @@ import subprocess
 import sys
 from pathlib import Path
 
-BUILTIN_ASSET = Path(__file__).parent.parent / "assets" / "do_it.mp3"
+BUILTIN_ASSET = Path(__file__).parent / "assets" / "do_it.mp3"
 USER_SOUNDS_DIR = Path.home() / ".jfdi" / "sounds"
+
+_current_player: subprocess.Popen | None = None
 
 
 def play_sound(sound_path: str | None = None) -> None:
-    """Play a sound file non-blocking.  Falls back to built-in DO IT clip."""
+    """Play a sound file non-blocking.  Falls back to built-in DO IT clip.
+
+    Kills any previously playing sound to prevent overlap.
+    """
+    global _current_player
+
     if sys.platform != "darwin":
         return
 
@@ -19,8 +26,12 @@ def play_sound(sound_path: str | None = None) -> None:
     if not path.exists():
         return
 
+    # Stop the previous sound if still playing
+    if _current_player is not None and _current_player.poll() is None:
+        _current_player.terminate()
+
     try:
-        subprocess.Popen(
+        _current_player = subprocess.Popen(
             ["afplay", str(path)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,

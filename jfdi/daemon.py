@@ -146,12 +146,7 @@ def daemon_status() -> dict[str, str | int | bool | None]:
     running = service.is_daemon_running()
     pid = service.get_daemon_pid() if running else None
 
-    started_at = None
-    if running:
-        service._ensure_db()
-        from jfdi import db
-        with db.get_conn() as conn:
-            started_at = db.get_config_value(conn, "daemon_started_at")
+    started_at = service.get_daemon_started_at() if running else None
 
     return {
         "running": running,
